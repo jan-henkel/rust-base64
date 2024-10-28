@@ -20,11 +20,4 @@ fn main() {
     let encoded = encode_to_vec(&standard_config, "Hello, World!".as_bytes());
     let base64str = String::from_utf8(encoded).unwrap();
     println!("Base64: {base64str}");
-    // let bytes = base64decode("SGVsbG8sIFdvcmxkIQ==").unwrap();
-    // let output = String::from_utf8(bytes).unwrap();
-    // println!("Output: {output}");
-    // let line = "Hello, World!";
-    // let encoded = base64encode(line);
-    // let encoded_str = String::from_utf8(encoded).unwrap();
-    // println!("Encoded string: {encoded_str}");
 }
