@@ -219,8 +219,7 @@ fn pack_triplet(encoded_triplet: &[u8]) -> [u8; 3] {
 
 fn chunk_iter<T: Default + Copy, const CHUNK_SIZE: usize>(
     iter: &(impl Iterator<Item = T> + Clone),
-) -> impl Iterator<Item = [T; CHUNK_SIZE]>
-{
+) -> impl Iterator<Item = [T; CHUNK_SIZE]> {
     let mut iter = iter.clone();
     std::iter::from_fn(move || {
         let mut array_chunk: [T; CHUNK_SIZE] = [T::default(); CHUNK_SIZE];
@@ -249,7 +248,10 @@ pub fn decode<'a>(
     Ok(decoded_bytes.take(num_bytes_unpadded))
 }
 
-pub fn decode_to_vec(config: &Base64Config, base64_encoded_bytes: &[u8]) -> Result<Vec<u8>, String> {
+pub fn decode_to_vec(
+    config: &Base64Config,
+    base64_encoded_bytes: &[u8],
+) -> Result<Vec<u8>, String> {
     let decoded_iter = decode(config, base64_encoded_bytes)?;
     Ok(Vec::from_iter(decoded_iter))
 }

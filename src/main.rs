@@ -11,7 +11,8 @@ fn main() {
             b'/'..=b'/',
         ],
         base64::Padding::NoPadding,
-    ).unwrap();
+    )
+    .unwrap();
     let standard_config = Base64Config::standard();
     let _url_config = Base64Config::url();
     let bytes = decode_to_vec(&config, "SGVsbG8sIFdvcmxkIQ".as_bytes()).unwrap();
