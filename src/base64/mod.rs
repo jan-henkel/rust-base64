@@ -249,13 +249,12 @@ fn decode_byte(config: &Base64Config, b: u8) -> u8 {
 }
 
 fn encode_byte(config: &Base64Config, b: u8) -> u8 {
-    let mut offset = 0;
+    let mut b_minus_offset = b;
     for r in &config.ranges {
-        let b_in_range = b + r.start() - offset;
-        if r.contains(&b_in_range) {
-            return b_in_range;
+        if b_minus_offset < r.len() as u8 {
+            return r.start() + b_minus_offset;
         }
-        offset += r.len() as u8;
+        b_minus_offset -= r.len() as u8;
     }
     return 0u8;
 }
