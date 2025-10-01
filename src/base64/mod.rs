@@ -20,7 +20,16 @@ pub enum Base64ConfigError {
     RangeLengthsDoNotSumTo64(usize),
 }
 
+#[derive(Debug)]
+pub enum Base64Error {
+    InvalidCharacter(u8),
+    InvalidLength(usize, u8),
+    HasPaddingAndLengthNotMultipleOf4(usize),
+    TooManyPaddingCharacters(usize),
+}
+
 impl error::Error for Base64ConfigError {}
+impl error::Error for Base64Error {}
 
 impl std::fmt::Display for Base64ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -46,6 +55,33 @@ impl std::fmt::Display for Base64ConfigError {
             }
             Base64ConfigError::RangeLengthsDoNotSumTo64(length) => {
                 write!(f, "Range lengths sum to {}, not 64", *length)
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Base64Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Base64Error::InvalidCharacter(c) => {
+                write!(f, "Invalid character \'{}\'", *c as char)
+            }
+            Base64Error::InvalidLength(length, padding_char) => {
+                write!(
+                    f,
+                    "Length {} not a multiple of 4. Padding with character \'{}\' required",
+                    *length, *padding_char as char
+                )
+            }
+            Base64Error::HasPaddingAndLengthNotMultipleOf4(length) => {
+                write!(
+                    f,
+                    "Padding characters detected and length {} not a multiple of 4",
+                    *length
+                )
+            }
+            Base64Error::TooManyPaddingCharacters(count) => {
+                write!(f, "Too many padding characters: {}", *count)
             }
         }
     }
@@ -174,30 +210,28 @@ fn count_trailing_pad_characters(config: &Base64Config, base64_encoded_bytes: &[
     }
 }
 
-fn validate_base64(config: &Base64Config, base64_encoded_bytes: &[u8]) -> Result<usize, String> {
+fn validate_base64(
+    config: &Base64Config,
+    base64_encoded_bytes: &[u8],
+) -> Result<usize, Base64Error> {
     let trailing_pad_count = count_trailing_pad_characters(config, base64_encoded_bytes);
     if trailing_pad_count >= 3 {
-        return Err(String::from("Too many trailing pad characters"));
+        return Err(Base64Error::TooManyPaddingCharacters(trailing_pad_count));
     }
     for c in base64_encoded_bytes.iter().rev().skip(trailing_pad_count) {
         if !config.ranges.iter().any(|r| r.contains(&c)) {
-            return Err(format!("Invalid character \'{}\'", *c as char));
+            return Err(Base64Error::InvalidCharacter(*c));
         }
     }
     let length = base64_encoded_bytes.len();
     if let Padding::Required(c) = config.padding {
         if length % 4 != 0 {
-            return Err(format!(
-                "Length {length} not a multiple of 4. Padding with character \'{}\' required",
-                c as char
-            ));
+            return Err(Base64Error::InvalidLength(length, c));
         }
     }
     if let Padding::Optional(_) = config.padding {
         if trailing_pad_count != 0 && length % 4 != 0 {
-            return Err(format!(
-                "Padding characters detected and length {length} not a multiple of 4",
-            ));
+            return Err(Base64Error::HasPaddingAndLengthNotMultipleOf4(length));
         }
     }
     Ok(length - trailing_pad_count)
@@ -272,7 +306,7 @@ fn chunk_iter<T: Default + Copy, const CHUNK_SIZE: usize, U: Iterator<Item = T> 
 pub fn decode<'a>(
     config: &'a Base64Config,
     base64_encoded_bytes: &'a [u8],
-) -> Result<impl Iterator<Item = u8> + use<'a>, String> {
+) -> Result<impl Iterator<Item = u8> + use<'a>, Base64Error> {
     let unpadded_length = validate_base64(config, &base64_encoded_bytes)?;
     let pad_length = (4 - (unpadded_length % 4)) % 4;
     let zeroes = [0u8].repeat(pad_length);
@@ -290,7 +324,7 @@ pub fn decode<'a>(
 pub fn decode_to_vec(
     config: &Base64Config,
     base64_encoded_bytes: &[u8],
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, Base64Error> {
     let decoded_iter = decode(config, base64_encoded_bytes)?;
     Ok(Vec::from_iter(decoded_iter))
 }
