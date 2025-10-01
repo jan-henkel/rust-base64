@@ -356,3 +356,6 @@ pub fn encode_to_vec(config: &Base64Config, bytes: &[u8]) -> Vec<u8> {
     let encoded_iter = encode(config, bytes);
     Vec::from_iter(encoded_iter)
 }
+
+#[cfg(test)]
+mod tests;
