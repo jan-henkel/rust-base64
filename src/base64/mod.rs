@@ -1,3 +1,4 @@
+use std::error;
 use std::ops::RangeInclusive;
 
 #[allow(dead_code)]
@@ -12,9 +13,50 @@ pub struct Base64Config {
     padding: Padding,
 }
 
+#[derive(Debug)]
+pub enum Base64ConfigError {
+    OverlappingRanges(RangeInclusive<u8>, RangeInclusive<u8>),
+    PaddingCharInRange(u8, RangeInclusive<u8>),
+    RangeLengthsDoNotSumTo64(usize),
+}
+
+impl error::Error for Base64ConfigError {}
+
+impl std::fmt::Display for Base64ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Base64ConfigError::OverlappingRanges(range1, range2) => {
+                write!(
+                    f,
+                    "Overlapping ranges {}..={} and {}..={}",
+                    *range1.start() as char,
+                    *range1.end() as char,
+                    *range2.start() as char,
+                    *range2.end() as char
+                )
+            }
+            Base64ConfigError::PaddingCharInRange(c, range) => {
+                write!(
+                    f,
+                    "Padding character \'{}\' found in range {}..={}",
+                    *c as char,
+                    *range.start() as char,
+                    *range.end() as char
+                )
+            }
+            Base64ConfigError::RangeLengthsDoNotSumTo64(length) => {
+                write!(f, "Range lengths sum to {}, not 64", *length)
+            }
+        }
+    }
+}
+
 impl Base64Config {
     #[allow(dead_code)]
-    pub fn new(ranges: Vec<RangeInclusive<u8>>, padding: Padding) -> Result<Self, String> {
+    pub fn new(
+        ranges: Vec<RangeInclusive<u8>>,
+        padding: Padding,
+    ) -> Result<Self, Base64ConfigError> {
         let config = Self { ranges, padding };
         validate_config(&config)?;
         Ok(config)
@@ -91,28 +133,25 @@ fn ranges_overlap<T: std::cmp::PartialOrd>(r1: &RangeInclusive<T>, r2: &RangeInc
     !((r1.end() < r2.start()) || (r1.start() > r2.end()))
 }
 
-fn validate_config(config: &Base64Config) -> Result<(), String> {
+fn validate_config(config: &Base64Config) -> Result<(), Base64ConfigError> {
     if let Some((r1, r2)) = choose2(config.ranges.iter())
         .filter(|(r1, r2)| ranges_overlap(r1, r2))
         .next()
     {
-        Err(format!(
-            "Overlapping ranges {}..={} and {}..={}",
-            *r1.start() as char,
-            *r1.end() as char,
-            *r2.start() as char,
-            *r2.end() as char
-        ))
-    } else if match config.padding {
-        Padding::Required(c) | Padding::Optional(c) => config.ranges.iter().any(|r| r.contains(&c)),
-        Padding::NoPadding => false,
-    } {
-        Err(String::from("Padding char contained in range"))
-    } else if config.ranges.iter().map(|r| r.len()).sum::<usize>() != 64usize {
-        Err(String::from("Range lengths do not sum up to 64"))
-    } else {
-        Ok(())
+        return Err(Base64ConfigError::OverlappingRanges(r1.clone(), r2.clone()));
     }
+    if let Padding::Required(c) | Padding::Optional(c) = config.padding {
+        for r in &config.ranges {
+            if r.contains(&c) {
+                return Err(Base64ConfigError::PaddingCharInRange(c, r.clone()));
+            }
+        }
+    }
+    let len_sum = config.ranges.iter().map(|r| r.len()).sum::<usize>();
+    if len_sum != 64usize {
+        return Err(Base64ConfigError::RangeLengthsDoNotSumTo64(len_sum));
+    }
+    return Ok(());
 }
 
 fn count_trailing_pad_characters(config: &Base64Config, base64_encoded_bytes: &[u8]) -> usize {
@@ -217,9 +256,9 @@ fn pack_triplet(encoded_triplet: &[u8]) -> [u8; 3] {
     ]
 }
 
-fn chunk_iter<T: Default + Copy, const CHUNK_SIZE: usize>(
-    iter: &(impl Iterator<Item = T> + Clone),
-) -> impl Iterator<Item = [T; CHUNK_SIZE]> {
+fn chunk_iter<T: Default + Copy, const CHUNK_SIZE: usize, U: Iterator<Item = T> + Clone>(
+    iter: &U,
+) -> impl Iterator<Item = [T; CHUNK_SIZE]> + use<T, CHUNK_SIZE, U> {
     let mut iter = iter.clone();
     std::iter::from_fn(move || {
         let mut array_chunk: [T; CHUNK_SIZE] = [T::default(); CHUNK_SIZE];
@@ -239,7 +278,7 @@ pub fn decode<'a>(
     let zeroes = [0u8].repeat(pad_length);
     let padded_base64_encoded_bytes = base64_encoded_bytes.iter().map(|c| *c).chain(zeroes);
     let padded_segments = padded_base64_encoded_bytes.map(|b| decode_byte(config, b));
-    let chunked_segments = chunk_iter::<u8, 4>(&padded_segments);
+    let chunked_segments = chunk_iter::<u8, 4, _>(&padded_segments);
     let chunked_bytes = chunked_segments.map(|chunk| pack_triplet(chunk.as_slice()));
     let decoded_bytes = chunked_bytes.flatten();
     let bits_per_segment = 6usize;
@@ -256,11 +295,11 @@ pub fn decode_to_vec(
     Ok(Vec::from_iter(decoded_iter))
 }
 
-pub fn encode<'a>(config: &'a Base64Config, bytes: &'a [u8]) -> impl Iterator<Item = u8> + use<'a> {
+pub fn encode(config: &Base64Config, bytes: &[u8]) -> impl Iterator<Item = u8> {
     let pad_length = (3 - bytes.len() % 3) % 3;
     let zeroes = [0u8].repeat(pad_length);
     let padded_bytes = bytes.iter().map(|c| *c).chain(zeroes);
-    let chunked_bytes = chunk_iter::<u8, 3>(&padded_bytes);
+    let chunked_bytes = chunk_iter::<u8, 3, _>(&padded_bytes);
     let chunked_segments = chunked_bytes.map(|chunk| unpack_triplet(chunk.as_slice()));
     let segments = chunked_segments.flatten();
     let base64_encoded_segments = segments.map(|b| encode_byte(config, b));
