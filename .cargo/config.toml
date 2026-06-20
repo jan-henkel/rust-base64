@@ -1,0 +1,2 @@
+[alias]
+coverage = "llvm-cov --html --open --ignore-filename-regex (tests.rs)|(main.rs)"
