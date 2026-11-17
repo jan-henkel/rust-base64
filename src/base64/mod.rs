@@ -94,8 +94,7 @@ impl Base64Config {
         padding: Padding,
     ) -> Result<Self, Base64ConfigError> {
         let config = Self { ranges, padding };
-        validate_config(&config)?;
-        Ok(config)
+        validate_config(config)
     }
     #[allow(dead_code)]
     pub fn standard() -> Self {
@@ -169,7 +168,7 @@ fn ranges_overlap<T: std::cmp::PartialOrd>(r1: &RangeInclusive<T>, r2: &RangeInc
     !((r1.end() < r2.start()) || (r1.start() > r2.end()))
 }
 
-fn validate_config(config: &Base64Config) -> Result<(), Base64ConfigError> {
+fn validate_config(config: Base64Config) -> Result<Base64Config, Base64ConfigError> {
     if let Some((r1, r2)) = choose2(config.ranges.iter())
         .filter(|(r1, r2)| ranges_overlap(r1, r2))
         .next()
@@ -187,7 +186,7 @@ fn validate_config(config: &Base64Config) -> Result<(), Base64ConfigError> {
     if len_sum != 64usize {
         return Err(Base64ConfigError::RangeLengthsDoNotSumTo64(len_sum));
     }
-    return Ok(());
+    return Ok(config);
 }
 
 fn count_trailing_pad_characters(config: &Base64Config, base64_encoded_bytes: &[u8]) -> usize {

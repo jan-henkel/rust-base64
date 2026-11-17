@@ -19,9 +19,10 @@ fn test_padding_char_in_range() {
         padding: Padding::Optional(b'='),
     };
     // validate_config should detect the padding char in a range
-    match validate_config(&cfg) {
+    match validate_config(cfg) {
         Err(Base64ConfigError::PaddingCharInRange(c, _)) if c == b'=' => {}
-        other => panic!("expected PaddingCharInRange('='), got {:?}", other),
+        Err(other) => panic!("expected PaddingCharInRange('='), got {:?}", other),
+        Ok(_) => panic!("expected PaddingCharInRange, got Ok"),
     }
 }
 
@@ -87,9 +88,10 @@ fn test_overlapping_ranges_validation() {
         ranges: vec![b'A'..=b'Z', b'Z'..=b'z'],
         padding: Padding::NoPadding,
     };
-    match validate_config(&cfg) {
-        Err(Base64ConfigError::OverlappingRanges(_, _)) => {}
-        other => panic!("expected overlapping ranges error, got {:?}", other),
+    match validate_config(cfg) {
+        Err(Base64ConfigError::OverlappingRanges(_, _)) => {},
+        Err(other) => panic!("expected overlapping ranges error, got {:?}", other),
+        Ok(_) => panic!("expected overlapping ranges error, got Ok"),
     }
 }
 
